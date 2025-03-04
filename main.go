@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -18,6 +17,26 @@ import (
 	"github.com/fatih/color"
 	"github.com/gliderlabs/ssh"
 	"github.com/pkg/sftp"
+	"gopkg.in/yaml.v3"
+)
+
+// Config represents the YAML configuration structure
+type Config struct {
+	SSH struct {
+		Port     string `yaml:"port"`
+		User     string `yaml:"user"`
+		Password string `yaml:"password"`
+		Timeout  int    `yaml:"timeout"`
+	} `yaml:"ssh"`
+	SFTP struct {
+		Enable bool `yaml:"enable"`
+	} `yaml:"sftp"`
+}
+
+// Global configuration variable
+var (
+	config     Config
+	configPath = "/ssh_config.yml"
 )
 
 func setWinsize(f *os.File, w, h int) {
@@ -26,64 +45,49 @@ func setWinsize(f *os.File, w, h int) {
 }
 
 func createDefaultConfig() error {
-	defaultConfig := `
-SSH_PORT=
-SSH_USER=
-SSH_PASSWORD=
-SSH_TIMEOUT=
-SFTP_ENABLE=
-`
-	return os.WriteFile("/.ssh_config", []byte(defaultConfig), 0644)
-}
+	defaultConfig := Config{}
+	defaultConfig.SSH.Port = "2222"
+	defaultConfig.SSH.User = "root"
+	defaultConfig.SSH.Password = "password"
+	defaultConfig.SSH.Timeout = 300
+	defaultConfig.SFTP.Enable = true
 
-func getConfigValue(key string) string {
-	value := os.Getenv(key)
-	if value != "" {
-		return value
+	yamlData, err := yaml.Marshal(&defaultConfig)
+	if err != nil {
+		return err
 	}
 
-	_, err := os.Stat("/.ssh_config")
+	return os.WriteFile(configPath, yamlData, 0644)
+}
+
+func loadConfig() error {
+	// Check if config file exists, create if not
+	_, err := os.Stat(configPath)
 	if os.IsNotExist(err) {
-		color.Yellow("/.ssh_config not found. Creating with default values.")
+		color.Yellow("Configuration file not found. Creating default config at %s", configPath)
 		if err := createDefaultConfig(); err != nil {
-			color.Red("Error creating /.ssh_config: %v", err)
-			return ""
+			color.Red("Error creating default config: %v", err)
+			return err
 		}
 	} else if err != nil {
-		color.Red("Error accessing /.ssh_config: %v", err)
-		return ""
+		color.Red("Error checking config file: %v", err)
+		return err
 	}
 
-	content, err := os.ReadFile("/.ssh_config")
+	// Read the config file
+	content, err := os.ReadFile(configPath)
 	if err != nil {
-		color.Red("Error reading /.ssh_config: %v", err)
-		return ""
+		color.Red("Error reading config file: %v", err)
+		return err
 	}
 
-	lines := strings.Split(string(content), "\n")
-	for _, line := range lines {
-		parts := strings.SplitN(strings.TrimSpace(line), "=", 2)
-		if len(parts) == 2 && parts[0] == key {
-			return strings.TrimSpace(parts[1])
-		}
+	// Parse YAML into config struct
+	if err := yaml.Unmarshal(content, &config); err != nil {
+		color.Red("Error parsing config: %v", err)
+		return err
 	}
 
-	return ""
-}
-
-func getTimeoutValue() time.Duration {
-	valueStr := getConfigValue("SSH_TIMEOUT")
-	if valueStr == "" {
-		return 0
-	}
-
-	value, err := strconv.Atoi(valueStr)
-	if err != nil {
-		color.Red("Error parsing SSH_TIMEOUT: %v", err)
-		return 0
-	}
-
-	return time.Duration(value) * time.Second
+	return nil
 }
 
 func sftpHandler(sess ssh.Session) {
@@ -162,32 +166,39 @@ func handleSession(s ssh.Session) {
 }
 
 func main() {
-	port := getConfigValue("SSH_PORT")
-	if port == "" {
-		port = "2222"
+	// Load configuration from YAML file
+	if err := loadConfig(); err != nil {
+		color.Red("Failed to load configuration: %v", err)
+		os.Exit(1)
 	}
 
-	sshUser := getConfigValue("SSH_USER")
-	sshPassword := getConfigValue("SSH_PASSWORD")
-	sshTimeout := getTimeoutValue()
-	sftpEnabled := getConfigValue("SFTP_ENABLE") == "true"
+	// Set default port if not configured
+	if config.SSH.Port == "" {
+		config.SSH.Port = "2222"
+	}
+
+	// Parse timeout to duration
+	var sshTimeout time.Duration
+	if config.SSH.Timeout > 0 {
+		sshTimeout = time.Duration(config.SSH.Timeout) * time.Second
+	}
 
 	server := &ssh.Server{
-		Addr: ":" + port,
+		Addr: ":" + config.SSH.Port,
 		PasswordHandler: func(ctx ssh.Context, pass string) bool {
-			success := sshPassword != "" && ctx.User() == sshUser && pass == sshPassword
+			success := config.SSH.Password != "" && ctx.User() == config.SSH.User && pass == config.SSH.Password
 			logLoginAttempt(ctx.RemoteAddr().String(), ctx.User(), success, "password")
 			return success
 		},
 	}
 
-	if sftpEnabled {
+	if config.SFTP.Enable {
 		server.SubsystemHandlers = map[string]ssh.SubsystemHandler{
 			"sftp": sftpHandler,
 		}
 	}
 
-	if sshPassword == "" {
+	if config.SSH.Password == "" {
 		server.PasswordHandler = nil
 	}
 
@@ -201,8 +212,9 @@ func main() {
 		color.Yellow("  - Idle timeout: %s", sshTimeout)
 	}
 
-	color.Blue("Starting SSH server on port %s...", port)
-
+	color.Yellow("  - User: %s", config.SSH.User)
+	color.Yellow("  - SFTP enabled: %v", config.SFTP.Enable)
+	color.Blue("Starting SSH server on port %s...", config.SSH.Port)
 	color.Yellow("  - Type 'q' to exit.")
 
 	// Start the SSH server in a separate goroutine
