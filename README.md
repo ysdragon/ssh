@@ -28,18 +28,31 @@ This is a custom SSH server primarily designed for use with my [Pterodactyl-VPS-
 
 ## Configuration
 
-#### Configuration Options
+### Configuration Options
 
 The configuration file is located at `/ssh_config.yml` and supports the following options:
 
-- `port` (under `ssh`): The port on which the SSH server will listen. Default is `2222`.
-- `user` (under `ssh`): The username for SSH authentication.
-- `password` (under `ssh`): The password for SSH authentication.
-- `timeout` (under `ssh`): The timeout duration in seconds for SSH connections (leave it commented out or set it to `0` to disable it).
-- `enable` (under `sftp`): Enable or disable SFTP functionality. Set to `true` to enable.
+### SSH Options
 
+| Option | Description | Default |
+|--------|-------------|---------|
+| `port` | Port number for SSH server | `2222` |
+| `user` | Username for SSH authentication | `root` |
+| `password` | Password for SSH authentication (supports plain text or bcrypt hash) | `password` |
+| `timeout` | Connection timeout in seconds (comment out or set to 0 to disable) | `300` |
 
-#### Example Configuration File
+### SFTP Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `enable` | Enable or disable SFTP support | `true` |
+
+> [!NOTE] 
+> The `timeout` setting is optional and can be omitted from the configuration.
+
+### Example `/ssh_config.yml` Configuration
+
+Here is an example configuration file:
 
 ```yml
 ssh:
