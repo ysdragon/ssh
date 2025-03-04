@@ -17,6 +17,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/gliderlabs/ssh"
 	"github.com/pkg/sftp"
+	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/yaml.v3"
 )
 
@@ -165,6 +166,25 @@ func handleSession(s ssh.Session) {
 	}
 }
 
+// Function to detect if a string is a bcrypt hash
+func isBcryptHash(str string) bool {
+	return len(str) > 0 && (strings.HasPrefix(str, "$2a$") ||
+		strings.HasPrefix(str, "$2b$") ||
+		strings.HasPrefix(str, "$2y$"))
+}
+
+// Function to check password - handles both bcrypt and plaintext
+func checkPassword(storedPassword, inputPassword string) bool {
+	// If it looks like a bcrypt hash, use bcrypt comparison
+	if isBcryptHash(storedPassword) {
+		err := bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(inputPassword))
+		return err == nil
+	}
+
+	// Otherwise, use plain text comparison
+	return storedPassword == inputPassword
+}
+
 func main() {
 	// Load configuration from YAML file
 	if err := loadConfig(); err != nil {
@@ -183,10 +203,14 @@ func main() {
 		sshTimeout = time.Duration(config.SSH.Timeout) * time.Second
 	}
 
+	// Detect if password is hashed
+	isPasswordHashed := isBcryptHash(config.SSH.Password)
+
 	server := &ssh.Server{
 		Addr: ":" + config.SSH.Port,
 		PasswordHandler: func(ctx ssh.Context, pass string) bool {
-			success := config.SSH.Password != "" && ctx.User() == config.SSH.User && pass == config.SSH.Password
+			// Make sure username matches and check password
+			success := config.SSH.User == ctx.User() && checkPassword(config.SSH.Password, pass)
 			logLoginAttempt(ctx.RemoteAddr().String(), ctx.User(), success, "password")
 			return success
 		},
@@ -213,6 +237,9 @@ func main() {
 	}
 
 	color.Yellow("  - User: %s", config.SSH.User)
+	if isPasswordHashed {
+		color.Yellow("  - Using bcrypt hashed password")
+	}
 	color.Yellow("  - SFTP enabled: %v", config.SFTP.Enable)
 	color.Blue("Starting SSH server on port %s...", config.SSH.Port)
 	color.Yellow("  - Type 'q' to exit.")
