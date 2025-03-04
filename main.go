@@ -203,7 +203,7 @@ func main() {
 
 	color.Blue("Starting SSH server on port %s...", port)
 
-	color.Yellow("  - Press 'q' to exit.")
+	color.Yellow("  - Type 'q' to exit.")
 
 	// Start the SSH server in a separate goroutine
 	go func() {
