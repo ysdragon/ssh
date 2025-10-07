@@ -39,18 +39,18 @@ The configuration file is located at `/ssh_config.yml` and supports the followin
 | `port` | Port number for SSH server | `2222` |
 | `user` | Username for SSH authentication | `root` |
 | `password` | Password for SSH authentication (supports plain text, bcrypt hash, or argon2 hash) | `password` |
+| `timeout` | Connection timeout in seconds (comment out or set to 0 to disable) | `300` |
 
 ### Password Hashing
 
 The SSH server supports multiple password hashing algorithms:
 
 - **Plain Text**: Store passwords in plain text (not recommended for production)
-- **Bcrypt**: Store passwords as bcrypt hashes
-- **Argon2**: Store passwords as argon2id hashes (recommended for security)
+- **Bcrypt**: Store passwords as bcrypt hashes (format: `$2a$...`, `$2b$...`, or `$2y$...`)
+- **Argon2**: Store passwords as argon2id hashes (format: `$argon2id$...`) (recommended for security)
 
 To generate a bcrypt hash, you can use tools like `htpasswd -B -n username` or online bcrypt generators.
 To generate an argon2 hash, you can use tools like `argon2` command-line tool or online generators.
-| `timeout` | Connection timeout in seconds (comment out or set to 0 to disable) | `300` |
 
 ### SFTP Options
 
