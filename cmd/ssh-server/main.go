@@ -118,8 +118,7 @@ func main() {
 		sshTimeout = time.Duration(cfg.SSH.Timeout) * time.Second
 	}
 
-	// Detect if password is hashed
-	isPasswordHashed := config.IsBcryptHash(cfg.SSH.Password)
+	// Check for hashed passwords (bcrypt or argon2)
 
 	server := &ssh.Server{
 		Addr: ":" + cfg.SSH.Port,
@@ -155,8 +154,10 @@ func main() {
 	}
 
 	color.Yellow("  - User: %s", cfg.SSH.User)
-	if isPasswordHashed {
+	if config.IsBcryptHash(cfg.SSH.Password) {
 		color.Yellow("  - Using bcrypt hashed password")
+	} else if config.IsArgon2Hash(cfg.SSH.Password) {
+		color.Yellow("  - Using argon2 hashed password")
 	}
 	color.Yellow("  - SFTP enabled: %v", cfg.SFTP.Enable)
 	color.Blue("Starting SSH server on port %s...", cfg.SSH.Port)

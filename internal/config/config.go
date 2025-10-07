@@ -108,8 +108,14 @@ func IsBcryptHash(str string) bool {
 		strings.HasPrefix(str, "$2y$"))
 }
 
-// CheckPassword checks password - handles both bcrypt and plaintext
+// CheckPassword checks password - handles both bcrypt, argon2 and plaintext
 func CheckPassword(storedPassword, inputPassword string) bool {
+	// If it looks like an argon2 hash, use argon2 comparison
+	if IsArgon2Hash(storedPassword) {
+		match, err := ComparePasswordAndHash(inputPassword, storedPassword)
+		return err == nil && match
+	}
+
 	// If it looks like a bcrypt hash, use bcrypt comparison
 	if IsBcryptHash(storedPassword) {
 		err := bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(inputPassword))
